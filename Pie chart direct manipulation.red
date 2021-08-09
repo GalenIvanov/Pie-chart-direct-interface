@@ -21,13 +21,14 @@ ard: 70x70
 sweep: 1  
 color: 2
 chkid: 3
+img:   4
 
 sectors: [
-    sides:     [180 yello  c-tile]
-    centers:   [180 orange c-dual]
-    diamond:   [  0 pink   c-diam]
-    truchet:   [  0 papaya c-truc] 
-    diagonals: [  0 beige  c-diag]
+    sides:     [180 yello  c-tile img-tile]
+    centers:   [180 orange c-dual img-dual]
+    diamond:   [  0 pink   c-diam img-diam]
+    truchet:   [  0 papaya c-truc img-truc] 
+    diagonals: [  0 beige  c-diag img-diag]
 ]
 
 {
@@ -39,6 +40,7 @@ pie: compose/deep[
 }
 
 reset-chk: func [ used ][
+    ; set all the checks to true and their share to 20%
     foreach s used [
         sectors/:s/:sweep: 360 / 5
         c-tile/data: on
@@ -53,15 +55,23 @@ make-pie: function [
     sect-used
 ][
     pie: make block! 200
-    start: either single? sect-used [90][0] 
+    ;start: either single? sect-used [180][0] 
+    start: 270
     collect/into [
         keep [pen black]    
         foreach s sect-used [
             t: sectors/:s
-            keep compose [
-                fill-pen (t/:color)
-                arc (cnt) (ard) (start) (t/:sweep) closed
-                ;rotate 5 (cnt) [image (img-tile) (as-pair (cnt/x + ard/x + 6) cnt/y - 12)]
+            keep compose [fill-pen (t/:color)]
+            ; (arcs)
+            keep either single? sect-used [
+                compose [circle (cnt) (ard/x)]                
+            ][    
+                compose [arc (cnt) (ard) (start) (t/:sweep) closed]
+            ]    
+            
+            keep compose/deep [
+                rotate (start + (t/:sweep / 2)) (cnt) 
+                [image (get t/:img) (as-pair (cnt/x + ard/x + 6) cnt/y - 12)]
             ]
             start: start + t/:sweep
         ]
@@ -75,27 +85,26 @@ get-checks: func [caller state /local checked][
         foreach [s sdata] sectors [if get in get sdata/:chkid 'data [keep s]]
     ] make block! 10
     
+    len: length? checked
+    
     either empty? checked [
         checked: extract sectors 2
-        ; set all the checks to true and their share to 20%
         reset-chk checked
         make-pie checked
     ][
         either state [
             ; add the caller sector
             foreach s checked [
-                delta: either s = caller [
-                    to integer! 360 / length? checked
-                ][
-                    negate to integer! sectors/:s/:sweep / length? checked
-                ]
-                sectors/:s/:sweep: sectors/:s/:sweep + delta
+                t: sectors/:s/:sweep
+                delta: either s = caller [to integer! 360 / len][0 - to integer! t / len]
+                sectors/:s/:sweep: t + delta
             ]
         ][ 
             ; remove the caller sector
             sectors/:caller/:sweep: 0
             foreach s checked [
-                sectors/:s/:sweep: sectors/:s/:sweep + to integer! sectors/:s/:sweep / length? checked
+                t: sectors/:s/:sweep
+                sectors/:s/:sweep: t + to integer! t / len
             ]
         ]   
     ]
@@ -112,13 +121,13 @@ view [
     bs draw [image img-tile] c-tile: chk "Sides"     on
     [get-checks 'sides c-tile/data] return 
     bs draw [image img-dual] c-dual: chk "Centers"   on
-    [get-checks 'centers c-dual/data]     return 
+    [get-checks 'centers c-dual/data] return 
     bs draw [image img-diam] c-diam: chk "Diamond"   off
     [get-checks 'diamond c-diam/data] return 
     bs draw [image img-truc] c-truc: chk "Truchet"   off
     [get-checks 'truchet c-truc/data] return 
     bs draw [image img-diag] c-diag: chk "Diagonals" off
-    [get-checks 'diagonals c-diag/data]     return
+    [get-checks 'diagonals c-diag/data] return
     space 20x10
     below return
     
@@ -126,6 +135,3 @@ view [
     draw []
     ;on-create [get-checks 'sides on]
 ]
-
-
-
