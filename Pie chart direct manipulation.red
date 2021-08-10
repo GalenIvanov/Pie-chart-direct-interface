@@ -23,6 +23,15 @@ color: 2
 chkid: 3
 img:   4
 
+drag?: false
+sel:  none
+start-ang: 0
+start-sweep: 0
+start: 0
+
+sectors-copy: make block! 10
+
+
 sectors: [
     sides:     [180 yello  c-tile img-tile]
     centers:   [180 orange c-dual img-dual]
@@ -30,6 +39,9 @@ sectors: [
     truchet:   [  0 papaya c-truc img-truc] 
     diagonals: [  0 beige  c-diag img-diag]
 ]
+
+checked: copy [sides: centers]
+drag-coords: make block! 10
 
 {
 pie: compose/deep[
@@ -42,7 +54,7 @@ pie: compose/deep[
 reset-chk: func [ used ][
     ; set all the checks to true and their share to 20%
     foreach s used [
-        sectors/:s/:sweep: 360 / 5
+        sectors/:s/:sweep: 72
         c-tile/data: on
         c-dual/data: on
         c-diam/data: on
@@ -51,46 +63,55 @@ reset-chk: func [ used ][
     ]
 ]
 
-make-pie: function [
-    sect-used
+make-pie: has [ ; function [
+    fr-start
 ][
     pie: make block! 200
-    ;start: either single? sect-used [180][0] 
-    start: 270
+    fr-start: start
+    
+    clear drag-coords
+    
     collect/into [
         keep [pen black]    
-        foreach s sect-used [
+        foreach s checked [ ;sect-used [
             t: sectors/:s
-            keep compose [fill-pen (t/:color)]
-            ; (arcs)
-            keep either single? sect-used [
+            keep compose [ fill-pen (t/:color)]
+            keep either single? checked [
                 compose [circle (cnt) (ard/x)]                
             ][    
-                compose [arc (cnt) (ard) (start) (t/:sweep) closed]
+                compose [arc (cnt) (ard) (fr-start) (t/:sweep) closed]
             ]    
-            
             keep compose/deep [
-                rotate (start + (t/:sweep / 2)) (cnt) 
+                rotate (fr-start + (t/:sweep / 2)) (cnt) 
                 [image (get t/:img) (as-pair (cnt/x + ard/x + 6) cnt/y - 12)]
             ]
-            start: start + t/:sweep
+            
+            ; append the center of the circle for coordinates check
+            append drag-coords compose [
+                (as-pair (cosine (t/:sweep / 2 + fr-start)) * (ard/x + 18) + cnt/x
+                         (sine   (t/:sweep / 2 + fr-start)) * (ard/y + 18) + cnt/y)
+                (s)
+            ]
+            fr-start: fr-start + t/:sweep  % 360
         ]
-    ] pie        
+    ] pie
+    ;probe drag-coords
     append clear bs-pie/draw pie
 ]
 
-get-checks: func [caller state /local checked][
+get-checks: func [caller state][
     
     checked: collect/into [
         foreach [s sdata] sectors [if get in get sdata/:chkid 'data [keep s]]
     ] make block! 10
     
+    ;probe checked
     len: length? checked
     
     either empty? checked [
         checked: extract sectors 2
         reset-chk checked
-        make-pie checked
+        make-pie ;checked
     ][
         either state [
             ; add the caller sector
@@ -107,8 +128,54 @@ get-checks: func [caller state /local checked][
                 sectors/:s/:sweep: t + to integer! t / len
             ]
         ]   
+        make-pie
     ]
-    make-pie checked
+]
+
+check-coords: func [offs /local c t][
+    foreach [c t] drag-coords [
+        if (c/x - offs/x ** 2) + (c/y - offs/y ** 2) ** 0.5 < 13 [
+            sel: t
+            drag?: true
+            start-ang: to integer! modulo arctangent2 offs/y - cnt/y offs/x - cnt/x 360
+            sect: head sectors
+            ; set the start agnle to the start of the selected type
+            while [sect/1 <> sel][
+                start: start + sect/2/:sweep // 360 
+                if sect/2/:sweep > 0 [move checked tail checked]
+                move/part sect tail sect 2
+                
+            ]
+            start-sweep: sectors/:sel/:sweep
+            sectors-copy: copy/deep sectors
+            break
+        ]
+    ]
+]
+
+update-sweeps: func [
+    offs
+    /local delta-ang t total
+][
+    if drag? [
+    
+        
+        delta-ang: to integer! ((arctangent2 offs/y - cnt/y offs/x - cnt/x) // 360) - start-ang
+        total: sectors/:sel/:sweep: to integer! start-sweep + (2 * delta-ang) // 360
+        
+        
+        foreach t checked [
+            if t <> sel [
+                sectors/:t/:sweep: to integer! sectors-copy/:t/:sweep
+             - (2 * delta-ang * sectors/:t/:sweep / (360.0 - sectors/:sel/:sweep)) // 360
+                total: total + sectors/:t/:sweep
+            ]
+        ]
+        ; add the remaining delat
+        if total < 360 [sectors/:t/:sweep: sectors/:t/:sweep + 360 - total]
+        make-pie
+    ]
+    
 ]
                      
 view [
@@ -132,6 +199,10 @@ view [
     below return
     
     bs-pie: base 200x200 sky
+    all-over 
     draw []
+    on-down [check-coords event/offset]
+    on-over [update-sweeps event/offset]
+    on-up   [drag?: false]
     ;on-create [get-checks 'sides on]
 ]
