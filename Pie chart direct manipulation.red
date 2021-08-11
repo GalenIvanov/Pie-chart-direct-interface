@@ -4,18 +4,18 @@ Red [
     needs:  view
 ]
 
-img-tile: draw 24x24 [fill-pen white pen black line-width 4 box 0x0 24x24]
-img-dual: draw 24x24 [fill-pen white pen black line-width 2 box 0x0 24x24
-                      line 12x0 12x24 line 0x12 24x12]
-img-diam: draw 24x24 [fill-pen white pen black line-width 2 box 0x0 24x24
-                      polygon 12x0 24x12 12x24 0x12]
-img-truc: draw 24x24 [fill-pen white pen black line-width 2 box 0x0 24x24
-                      fill-pen transparent circle 0x0 12 circle 24x24 12]  
-img-diag: draw 24x24 [fill-pen white pen black line-width 2 box 0x0 24x24
-                      line 0x0 24x24 line 24x0 0x24]                      
+img-tile: draw 20x20 [fill-pen white pen black line-width 4 box 0x0 20x20]
+img-dual: draw 20x20 [fill-pen white pen black line-width 2 box 0x0 20x20
+                      line 10x0 10x20 line 0x10 20x10]
+img-diam: draw 20x20 [fill-pen white pen black line-width 2 box 0x0 20x20
+                      polygon 10x0 20x10 10x20 0x10]
+img-truc: draw 20x20 [fill-pen white pen black line-width 2 box 0x0 20x20
+                      fill-pen transparent circle 0x0 10 circle 20x20 10]  
+img-diag: draw 20x20 [fill-pen white pen black line-width 2 box 0x0 20x20
+                      line 0x0 20x20 line 20x0 0x20]                      
                       
-cnt: 100x100
-ard: 70x70
+cnt: 120x120 ;100x100
+ard: 90x90 * ;70x70
 
 ; indices in sectors sub-blocks 
 sweep: 1  
@@ -26,6 +26,7 @@ img:   4
 drag?: false
 sel:  none
 start-ang: 0
+delta-ang: 0
 start-sweep: 0
 start: 0
 
@@ -53,14 +54,12 @@ pie: compose/deep[
 
 reset-chk: func [ used ][
     ; set all the checks to true and their share to 20%
-    foreach s used [
-        sectors/:s/:sweep: 72
-        c-tile/data: on
-        c-dual/data: on
-        c-diam/data: on
-        c-truc/data: on
-        c-diag/data: on
-    ]
+    foreach s used [sectors/:s/:sweep: 72]
+    c-tile/data: on
+    c-dual/data: on
+    c-diam/data: on
+    c-truc/data: on
+    c-diag/data: on
 ]
 
 make-pie: has [ ; function [
@@ -79,11 +78,11 @@ make-pie: has [ ; function [
             keep either single? checked [
                 compose [circle (cnt) (ard/x)]                
             ][    
-                compose [arc (cnt) (ard) (fr-start) (t/:sweep) closed]
+                compose/deep [scale 0.1 0.1 [pen white line-width 10 arc (cnt * 10) (ard * 10) (fr-start) (t/:sweep) closed]]
             ]    
             keep compose/deep [
                 rotate (fr-start + (t/:sweep / 2)) (cnt) 
-                [image (get t/:img) (as-pair (cnt/x + ard/x + 6) cnt/y - 12)]
+                [image (get t/:img) (as-pair (cnt/x + ard/x + 5) cnt/y - 10)]
             ]
             
             ; append the center of the circle for coordinates check
@@ -96,6 +95,7 @@ make-pie: has [ ; function [
         ]
     ] pie
     ;probe drag-coords
+    update-texts
     append clear bs-pie/draw pie
 ]
 
@@ -134,7 +134,7 @@ get-checks: func [caller state][
 
 check-coords: func [offs /local c t][
     foreach [c t] drag-coords [
-        if (c/x - offs/x ** 2) + (c/y - offs/y ** 2) ** 0.5 < 13 [
+        if (c/x - offs/x ** 2) + (c/y - offs/y ** 2) ** 0.5 < 12 [
             sel: t
             drag?: true
             start-ang: to integer! modulo arctangent2 offs/y - cnt/y offs/x - cnt/x 360
@@ -153,38 +153,61 @@ check-coords: func [offs /local c t][
     ]
 ]
 
+test-sectors: func [
+    offs
+    /locals t total sct
+][
+    sct: copy/deep sectors
+    delta-ang: to integer! ((arctangent2 offs/y - cnt/y offs/x - cnt/x) // 360) - start-ang
+    total: sct/:sel/:sweep: to integer! start-sweep + (2 * delta-ang) // 360
+    
+    foreach t next checked [
+        sct/:t/:sweep: max 4 to integer! sectors-copy/:t/:sweep
+      - (2 * delta-ang * sectors-copy/:t/:sweep / (360.0 - sectors-copy/:sel/:sweep))
+        total: total + sct/:t/:sweep
+    ]
+    ; add the remaining sweep
+    sct/:t/:sweep: sct/:t/:sweep + 360 - total
+    sct
+]
+
+update-texts: has [t obj][
+    foreach [k v] sectors [
+        obj: get v/:chkid
+        obj/text: form to integer! v/:sweep / 360.0 * 100
+    ]
+]
+
 update-sweeps: func [
     offs
-    /local delta-ang t total
+    /local t total sct res
 ][
     if drag? [
     
-        
-        delta-ang: to integer! ((arctangent2 offs/y - cnt/y offs/x - cnt/x) // 360) - start-ang
-        total: sectors/:sel/:sweep: to integer! start-sweep + (2 * delta-ang) // 360
-        
-        
+        sct: test-sectors offs
+        res: on
         foreach t checked [
-            if t <> sel [
-                sectors/:t/:sweep: to integer! sectors-copy/:t/:sweep
-             - (2 * delta-ang * sectors/:t/:sweep / (360.0 - sectors/:sel/:sweep)) // 360
-                total: total + sectors/:t/:sweep
-            ]
+            res: res and (sct/:t/:sweep > 4)
         ]
-        ; add the remaining delat
-        if total < 360 [sectors/:t/:sweep: sectors/:t/:sweep + 360 - total]
+        
+        either res [
+            sectors: copy/deep sct
+            update-texts
+        ][
+            ;drag?: false
+            ;start-ang: start-ang - delta-ang
+        ]
         make-pie
     ]
-    
 ]
                      
 view [
     title "Pie chart manipulation"
     backdrop sky
     across middle
-    style chk: check 70x20 
-    style bs: base 24x24
-    space 5x20
+    style chk: check 35x20 
+    style bs: base 20x20
+    space 5x30
     bs draw [image img-tile] c-tile: chk "Sides"     on
     [get-checks 'sides c-tile/data] return 
     bs draw [image img-dual] c-dual: chk "Centers"   on
@@ -198,11 +221,11 @@ view [
     space 20x10
     below return
     
-    bs-pie: base 200x200 sky
+    bs-pie: base 240x240 sky
     all-over 
     draw []
     on-down [check-coords event/offset]
     on-over [update-sweeps event/offset]
     on-up   [drag?: false]
-    ;on-create [get-checks 'sides on]
+    on-create [make-pie]
 ]
