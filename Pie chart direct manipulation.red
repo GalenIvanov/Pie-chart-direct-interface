@@ -31,14 +31,14 @@ start-sweep: 0
 start: 0
 
 sectors: [
-    sides:     [180 yello       c-tile img-tile]
-    centers:   [180 255.170.120 c-dual img-dual]
+    sides:     [360 yello       c-tile img-tile]
+    centers:   [  0 255.170.120 c-dual img-dual]
     diamond:   [  0 pink        c-diam img-diam]
     truchet:   [  0 papaya      c-truc img-truc] 
     diagonals: [  0 beige       c-diag img-diag]
 ]
 sectors-copy: make block! 10
-checked: copy [sides: centers]
+checked: copy [sides:]
 drag-coords: make block! 10
 
 reset-chk: func [ used ][
@@ -153,14 +153,12 @@ test-sectors: func [
     total: sct/:sel/:sweep: to integer! start-sweep + (2 * delta-ang)
     
     foreach t next checked [
-        ;unless (sectors-copy/:t/:sweep = 1) and (delta-ang < 0) [
-            sct/:t/:sweep: to integer! sectors-copy/:t/:sweep
-          - (2 * delta-ang * sectors-copy/:t/:sweep / (360.0 - sectors-copy/:sel/:sweep))
-            total: total + sct/:t/:sweep
-        ;]
+        sct/:t/:sweep: max 4 to integer! (old: sectors-copy/:t/:sweep)
+      - (2 * delta-ang * old / (360.0 - sectors-copy/:sel/:sweep))
+        total: total + sct/:t/:sweep
     ]
     ; add the remaining sweep
-    sct/:t/:sweep: sct/:t/:sweep + 360 - total
+    sct/:t/:sweep: sct/:t/:sweep + 360 - total   ;
     sct
 ]
 
@@ -177,16 +175,16 @@ update-texts: has [obj c sum][
 
 update-sweeps: func [
     offs
-    /local t total sct res
+    /local t total sect res
 ][
-    if drag? [
-        sct: test-sectors offs
+    if all [drag? not single? checked]  [
+        sect: test-sectors offs
         res: on
         foreach t checked [
-            res: res and (sct/:t/:sweep > 4)
-        ]
+		   ; if sect/:t/:sweep < 5 [probe t probe sect probe checked]
+		    res: res and (sect/:t/:sweep >= 4)]
         if res [
-            sectors: copy/deep sct
+            sectors: copy/deep sect
             make-pie
         ]
     ]
@@ -201,7 +199,7 @@ view [
     space 5x30
     bs draw [image img-tile] c-tile: chk "Sides"     on
     [get-checks 'sides c-tile/data] return 
-    bs draw [image img-dual] c-dual: chk "Centers"   on
+    bs draw [image img-dual] c-dual: chk "Centers"   off
     [get-checks 'centers c-dual/data] return 
     bs draw [image img-diam] c-diam: chk "Diamond"   off
     [get-checks 'diamond c-diam/data] return 
